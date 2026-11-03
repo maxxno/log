@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Мій день">
+<title>Мій день</title>
+<style>
+:root{--blue:#0057b7;--yellow:#ffd700;--red:#c1121f;--bg:#f7f3e8;--card:#fff;--text:#1b2430;--muted:#6b7686;--line:#e4dcc6}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1726;--card:#172338;--text:#eef2f8;--muted:#93a1b8;--line:#263652}}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);padding-bottom:env(safe-area-inset-bottom,0)}
+header{background:var(--blue);color:#fff;padding:calc(env(safe-area-inset-top,0px) + 16px) 18px 14px}
+h1{margin:0;font-size:22px}
+#motto{margin:4px 0 0;color:var(--yellow);font-size:14px;font-style:italic}
+#tr{margin:4px 0 0;font-size:13px;opacity:.9}
+.mb{display:flex;gap:8px;margin-top:10px}
+.mb button{border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.12);color:var(--yellow);padding:6px 12px;border-radius:999px;font-size:13px}
+.stitch{height:12px;background-color:#f5ecd7;background-image:linear-gradient(135deg,var(--red) 25%,transparent 25%),linear-gradient(225deg,var(--red) 25%,transparent 25%),linear-gradient(315deg,#111 25%,transparent 25%),linear-gradient(45deg,#111 25%,transparent 25%);background-size:12px 12px;background-position:-6px 0,-6px 0,0 0,0 0}
+main{padding:14px;max-width:560px;margin:0 auto}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.tile{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--yellow);border-radius:12px;padding:10px 12px}
+.tile b{display:block;font-size:22px}.tile span{color:var(--muted);font-size:12px}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;font-size:14px}
+.tabs button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:10px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+input,select{width:100%;padding:11px;font-size:16px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+.go{width:100%;margin-top:14px;padding:13px;font-size:16px;font-weight:600;border:0;border-radius:12px;background:var(--yellow);color:#1b2430}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+li:last-child{border:0}li button{border:0;background:none;color:var(--red);font-size:18px}
+h2{font-size:15px;margin:0 0 4px}
+.foot{text-align:center;color:var(--muted);font-size:12px;margin:18px 0;line-height:2}
+.foot a{color:var(--blue);margin:0 6px}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translateX(-50%);background:var(--blue);color:#fff;padding:10px 18px;border-radius:999px;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="hello"></h1>
+  <p id="motto"></p><p id="tr" hidden></p>
+  <div class="mb"><button id="mNew">🔄 Інше · Another</button><button id="mTr">🌐 Переклад · Translate</button></div>
+</header>
+<div class="stitch"></div>
+<main>
+  <div class="tiles" id="tiles"></div>
+  <div class="tabs" id="tabs"></div>
+  <div class="card"><div id="form"></div><button class="go" id="save">Зберегти · Save</button></div>
+  <div class="card"><h2>Останні записи · Recent</h2><ul id="recent"></ul></div>
+  <p class="foot">
+    <a href="#" id="exp">⬇️ Резервна копія · Export</a><a href="#" id="imp">⬆️ Імпорт · Import</a><br>
+    <a href="#" id="nm">змінити ім’я · change name</a><br>
+    Дані зберігаються лише на цьому пристрої · Data stays on this device · 💙💛
+  </p>
+  <input type="file" id="file" accept="application/json" hidden>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $ = id => document.getElementById(id);
+const KEY = "mijden_v1", T = ["weights", "workouts", "meals", "books", "writing"];
+let data = { name: "", weights: [], workouts: [], meals: [], books: [], writing: [] };
+try { Object.assign(data, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) {}
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { toast("Не вдалося зберегти · Could not save"); } };
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); }
+
+const TABS = {
+  weights: { label: "⚖️ Вага · Weight", req: ["weight_kg"], f: [["weight_kg", "Вага, кг · Weight (kg)", "number", "0.1"]] },
+  workouts: { label: "🥊 Тренування · Workout", req: ["type", "duration_min"], f: [["type", "Вид · Type", "text"], ["duration_min", "Хвилин · Minutes", "number", "1"], ["calories_burned", "Спалено ккал · Burned kcal", "number", "1"], ["intensity", "Інтенсивність 1–10 · Intensity", "number", "1"]] },
+  meals: { label: "🍲 Їжа · Food", req: ["food", "calories"], f: [["meal", "Прийом їжі · Meal", "select", [["breakfast", "Сніданок · Breakfast"], ["lunch", "Обід · Lunch"], ["dinner", "Вечеря · Dinner"], ["snack", "Перекус · Snack"]]], ["food", "Що · What", "text"], ["calories", "Калорії · Calories", "number", "1"], ["protein_g", "Білок, г · Protein (g)", "number", "0.1"]] },
+  books: { label: "📚 Книги · Books", req: ["title"], f: [["title", "Назва · Title", "text"], ["author", "Автор · Author", "text"], ["status", "Статус · Status", "select", [["want", "Хочу · Want"], ["reading", "Читаю · Reading"], ["finished", "Прочитано · Finished"]]]] },
+  writing: { label: "✍️ Писання · Writing", req: ["project", "words"], f: [["project", "Проєкт · Project", "text"], ["words", "Слів · Words", "number", "1"], ["minutes", "Хвилин · Minutes", "number", "1"]] },
+};
+let tab = "weights";
+
+const M = [
+  ["🇺🇦", "🇬🇧", [["Терпіння і труд усе перетруть — особливо м’язи.", "Patience and hard work grind down anything — especially muscles."], ["Без труда нема плода, а без білка — біцепса.", "No labour, no fruit — and no protein, no biceps."], ["Хто рано встає, тому штанга дає.", "Whoever rises early, the barbell rewards."], ["Під лежачу штангу м’язи не ростуть.", "Muscles don’t grow under a barbell that just lies there."], ["День без тренування — день, коли переміг ліфт.", "A day without training is a day the elevator won."]]],
+  ["🇬🇧", "🇺🇦", [["Sweat now, snack later.", "Спершу піт, потім перекус."], ["Legs today, regret tomorrow, stairs on Wednesday.", "Ноги сьогодні, жаль завтра, сходи в середу."], ["Be the reason the dumbbells are tired.", "Будь причиною, чому гантелі втомилися."], ["Eat clean, train mean, nap often.", "Їж чисто, тренуйся люто, спи часто."], ["Rome wasn’t built in a day, and neither were these biceps.", "Рим не за день збудували — і ці біцепси теж."]]],
+  ["🇪🇸", "🇺🇦", [["Sin dolor no hay gloria, y sin proteína tampoco.", "Без болю нема слави, а без білка — теж."], ["Al que madruga, Dios lo ayuda… y el gimnasio está vacío.", "Хто рано встає, тому Бог допомагає… і в залі порожньо."], ["Más vale sudar hoy que lamentar mañana.", "Краще спітніти сьогодні, ніж шкодувати завтра."], ["Camarón que se duerme se lo lleva la corriente; atleta que se duerme, el sofá.", "Креветку, що заснула, забирає течія; спортсмена, що заснув, — диван."], ["A mal día, buenas sentadillas.", "На поганий день — добрі присідання."]]],
+  ["🏛️", "🇺🇦", [["Per aspera ad abs.", "Через терни — до кубиків преса."], ["Carpe diem, carpe ferrum.", "Лови день, лови залізо."], ["Mens sana in corpore sano, et bicipitibus magnis.", "У здоровому тілі здоровий дух — і великі біцепси."], ["Citius, altius, fortius — et post hoc cibus.", "Швидше, вище, сильніше — а потім їжа."], ["Veni, vidi, sudavi.", "Прийшов, побачив, спітнів."]]],
+  ["🇩🇪", "🇺🇦", [["Ohne Fleiß kein Preis — ohne Protein kein Bizeps.", "Без праці нема нагороди — без білка нема біцепса."], ["Der frühe Vogel fängt den Wurm, der frühe Sportler die leere Hantelbank.", "Рання пташка ловить черв’яка, ранній спортсмен — вільну лаву."], ["Was dich nicht umbringt, macht dich stärker — außer Beintag.", "Що тебе не вбиває, робить сильнішим — крім дня ніг."], ["Aller Anfang ist schwer, aber die Hantel ist schwerer.", "Усяке начало важке, але гантеля важча."], ["Wer rastet, der rostet — wer Eisen stemmt, der glänzt.", "Хто відпочиває, той іржавіє — хто тягне залізо, той сяє."]]],
+  ["🇷🇺", "🇺🇦", [["Тише едешь — дальше будешь, но штанга сама себя не поднимет.", "Тихіше їдеш — далі будеш, але штанга сама себе не підніме."], ["Без труда не вытянешь и штангу из стойки.", "Без праці й штангу зі стійки не витягнеш."], ["Под лежачий камень вода не течёт, а под лежачий диван — бицепс.", "Під лежачий камінь вода не тече, а під лежачий диван — біцепс (теж)."], ["Кто рано встаёт, тому шейкер подаёт.", "Хто рано встає, тому шейкер подає."], ["Не откладывай на завтра то, что можно прокачать сегодня.", "Не відкладай на завтра те, що можна прокачати сьогодні."]]],
+];
+const ALL = M.flatMap(([f, tf, l]) => l.map(([t, r]) => ({ f, tf, t, r })));
+let cur = null;
+function showMotto(m) { cur = m; $("motto").textContent = `${m.f} ${m.t}`; $("tr").hidden = true; $("mTr").textContent = "🌐 Переклад · Translate"; }
+$("mTr").onclick = () => { const h = !$("tr").hidden; $("tr").hidden = h; $("tr").textContent = `${cur.tf} ${cur.r}`; $("mTr").textContent = h ? "🌐 Переклад · Translate" : "🌐 Сховати · Hide"; };
+$("mNew").onclick = () => { let m; do m = ALL[Math.floor(Math.random() * ALL.length)]; while (m === cur); showMotto(m); };
+
+function greet() {
+  const h = new Date().getHours();
+  const p = h < 5 ? "Доброї ночі" : h < 12 ? "Доброго ранку" : h < 18 ? "Доброго дня" : "Доброго вечора";
+  $("hello").textContent = `${p}, ${data.name} 🌻`;
+  const day = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+  showMotto(ALL[(day % M.length) * 5 + Math.floor(day / M.length) % 5]);
+}
+function askName() {
+  const n = (prompt("Як тебе звати? · What’s your name?", data.name) || "").trim();
+  if (n) { data.name = n; persist(); }
+  if (!data.name) data.name = "друже";
+  greet();
+}
+
+function renderTabs() {
+  $("tabs").innerHTML = "";
+  for (const k in TABS) {
+    const b = document.createElement("button");
+    b.textContent = TABS[k].label; b.className = k === tab ? "on" : "";
+    b.onclick = () => { tab = k; renderTabs(); renderForm(); renderRecent(); };
+    $("tabs").appendChild(b);
+  }
+}
+function renderForm() {
+  $("form").innerHTML = TABS[tab].f.map(([n, l, t, x]) => {
+    const i = t === "select" ? `<select id="f_${n}">${x.map(([v, o]) => `<option value="${v}">${o}</option>`).join("")}</select>`
+      : `<input id="f_${n}" type="${t}" ${t === "number" ? `step="${x}" inputmode="decimal"` : ""} autocomplete="off">`;
+    return `<label for="f_${n}">${l}${TABS[tab].req.includes(n) ? " *" : ""}</label>${i}`;
+  }).join("");
+}
+function save() {
+  const row = { id: Date.now(), date: today() }, miss = [];
+  for (const [n, l, t] of TABS[tab].f) {
+    const v = $("f_" + n).value.trim();
+    if (v === "") { if (TABS[tab].req.includes(n)) miss.push(l); continue; }
+    row[n] = t === "number" ? Number(v) : v;
+  }
+  if (miss.length) return toast("Заповніть · Fill in: " + miss.join(", "));
+  data[tab].push(row); persist();
+  toast("Готово! · Done! 🌻"); renderForm(); renderRecent(); renderTiles();
+}
+function renderRecent() {
+  const rows = data[tab].slice().sort((a, b) => b.id - a.id).slice(0, 5);
+  $("recent").innerHTML = rows.length ? rows.map(r => `<li><span>${Object.entries(r).filter(([k]) => k !== "id").map(([, v]) => v).join(" · ")}</span><button onclick="del(${r.id})">×</button></li>`).join("") : "<li>Поки що порожньо · Nothing yet</li>";
+}
+function del(id) { if (confirm("Видалити? · Delete?")) { data[tab] = data[tab].filter(r => r.id !== id); persist(); renderRecent(); renderTiles(); } }
+function renderTiles() {
+  const d = today(), sum = (k, f) => data[k].filter(r => r.date === d).reduce((a, r) => a + (r[f] || 0), 0);
+  const w = data.weights.filter(r => r.date === d).sort((a, b) => b.id - a.id)[0];
+  $("tiles").innerHTML = [[sum("meals", "calories"), "ккал з’їдено · kcal in"], [sum("workouts", "calories_burned"), "ккал спалено · kcal out"], [w ? w.weight_kg : "—", "вага, кг · weight (kg)"], [sum("writing", "words"), "слів · words written"]]
+    .map(([n, l]) => `<div class="tile"><b>${n}</b><span>${l}</span></div>`).join("");
+}
+
+$("save").onclick = save;
+$("nm").onclick = e => { e.preventDefault(); askName(); };
+$("exp").onclick = e => { e.preventDefault(); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" })); a.download = `my-day-${today()}.json`; a.click(); };
+$("imp").onclick = e => { e.preventDefault(); $("file").click(); };
+$("file").onchange = async e => {
+  try { const j = JSON.parse(await e.target.files[0].text()); if (!T.every(k => Array.isArray(j[k]))) throw 0; data = { name: data.name, ...j }; persist(); greet(); renderRecent(); renderTiles(); toast("Імпортовано · Imported"); }
+  catch (err) { toast("Невірний файл · Invalid file"); }
+};
+if (!data.name) askName(); else greet();
+renderTabs(); renderForm(); renderRecent(); renderTiles();
+</script>
+</body>
+</html>
